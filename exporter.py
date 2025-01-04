@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import logging
 import sys
@@ -78,91 +78,27 @@ class AwgShowWrapper:
         None
     """
 
-    @staticmethod
-    def parse_time_string(time_string: str) -> int:
-        """
-        Parse a time string from `awg show` (`latest handshake` line)
-        and return the corresponding timestamp.
-
-        Args:
-            time_string (str): The time string to parse.
-
-        Returns:
-            int: The timestamp in seconds.
-        """
-        patterns = {
-            'days': r'(\d+) days?',
-            'hours': r'(\d+) hours?',
-            'minutes': r'(\d+) minutes?',
-            'seconds': r'(\d+) seconds?'
-        }
-        components = {'days': 0, 'hours': 0, 'minutes': 0, 'seconds': 0}
-        for key, pattern in patterns.items():
-            match = re.search(pattern, time_string)
-            if match:
-                components[key] = int(match.group(1))
-        delta = timedelta(days=components['days'],
-                          hours=components['hours'],
-                          minutes=components['minutes'],
-                          seconds=components['seconds'])
-        timestamp = datetime.now() - delta
-        return int(timestamp.timestamp())
 
     @staticmethod
-    def to_bytes(binary_units: str) -> int:
+    def parse(text_block: str) -> list:
         """
-        Convert a string representation of byte size to an integer byte count.
-
-        Args:
-            binary_units (str): The string representation of byte size.
-
-        Returns:
-            int: The integer byte count.
-        """
-        quantity = binary_units.split(' ')[0:2]
-        units = {
-            "B":   1,
-            "KiB": 1024,
-            "MiB": 1024 ** 2,
-            "GiB": 1024 ** 3,
-            "TiB": 1024 ** 4
-        }
-        value, unit = quantity
-        value = float(value)
-        bytes_quantity = value * units[unit]
-        return int(bytes_quantity)
-
-    @staticmethod
-    def parse(text_block: str) -> list[dict]:
-        """
-        Parse a text block containing information about wireguard peers into a list of dictionaries.
+        Parse a text block containing information about AmneziaWG peers into a list of dictionaries.
 
         Args:
             text_block (str): The text block to parse.
-
-        Returns:
-            list[dict]: A list of dictionaries representing information about wireguard peers.
         """
+        lines = text_block.strip().splitlines()
         peers = []
-        current_peer = {}
-        for line in text_block.split('\n'):
-            if line.strip():
-                key, value = line.split(': ', 1)
-                key = key.strip().replace(" ", "_")
-                value = value.strip()
-                if key == 'transfer':
-                    current_peer['received'] = AwgShowWrapper.to_bytes(value.split(', ')[0])
-                    current_peer['sent'] = AwgShowWrapper.to_bytes(value.split(', ')[1])
-                elif key == 'latest_handshake':
-                    current_peer['latest_handshake'] = AwgShowWrapper.parse_time_string(value)
-                else:
-                    current_peer[key] = value
-            else:
-                if current_peer.get('peer'):
-                    peers.append(current_peer)
-                current_peer = {}
-        if current_peer:
-            peers.append(current_peer)
+        for line in lines[1:]:  # exclude 1st line with host data
+            parts = line.split()
+            current_peer = {}
+            if len(parts) >= 6:
+                current_peer['peer'] = parts[1]
+                current_peer['latest_handshake'] = parts[5]
+                current_peer['received'] = parts[6]
+                current_peer['sent'] = parts[7]
+                peers.append(current_peer)
+
         return peers
 
     @staticmethod
@@ -296,7 +232,7 @@ class Exporter():
             if not parsed_data:
                 self.status.set(0)
                 return
-            if not bool(self.config.clients_table_enabled):
+            if not bool(self.config['clients_table_enabled']):
                 clients_table = []
             else:
                 clients_table = self.read_clients_table(self.config['clients_table_file'])
@@ -314,22 +250,21 @@ class Exporter():
         Starts the main loop for updating metrics periodically.
         """
         self.log.info('Start main loop')
-        self.log.info(f"Ops mode: {self.config['ops_mode']}")
         signal.signal(signal.SIGTERM, self.sigterm_handler)
         signal.signal(signal.SIGINT, self.sigint_handler)
         if self.config['ops_mode'] == 'http':
             # Start up the server to expose the metrics.
-            start_http_server(self.config['http_port'], registry=self.registry)
-        if not bool(self.config.clients_table_enabled):
+            start_http_server(self.config['http_port'], addr=self.config['addr'], registry=self.registry)
+        if not bool(self.config['clients_table_enabled']):
             self.log.info('Clients Table option is disabled. All clients will be identified as \"unidentified\"')
         while True:
             try:
                 self.update_metrics()
-                if self.config['ops_mode'] != 'http':
-                    self.write_metrics_to_file(self.config['metrics_file'])
-                    if self.config['ops_mode'] == 'oneshot':
-                        self.log.info("Exiting after successful metrics fetch...")
-                        break
+                if self.config['ops_mode'] in ['metricsfile', 'oneshot']:
+                    write_to_textfile(self.config['metrics_file'], self.registry)
+                if self.config['ops_mode'] == 'oneshot':
+                    self.log.info("Exiting after successful metrics fetch...")
+                    break
                 time.sleep(self.config['scrape_interval'])
             except Exception as e:
                 self.log.error(f"{str(e)}")
@@ -343,6 +278,7 @@ if __name__ == '__main__':
     exporter_config = {
         'scrape_interval': config('AWG_EXPORTER_SCRAPE_INTERVAL', default=60),
         'http_port': config('AWG_EXPORTER_HTTP_PORT', default=9351),
+        'addr': config('AWG_EXPORTER_LISTEN_ADDR', default='0.0.0.0'),
         'metrics_file': config('AWG_EXPORTER_METRICS_FILE', default='/tmp/prometheus/awg.prom'),
         'ops_mode': config('AWG_EXPORTER_OPS_MODE', default='http'),
         'clients_table_enabled': config('AWG_EXPORTER_CLIENTS_TABLE_ENABLED', default='false'),
@@ -351,6 +287,8 @@ if __name__ == '__main__':
     }
     log.info('Exporter config:')
     for key, value in exporter_config.items():
+        if key == 'metrics_file' and exporter_config['ops_mode'] != 'metricsfile':
+            continue
         log.info(f"--> {key}: {value}")
     exporter = Exporter(exporter_config)
     exporter.main_loop()
