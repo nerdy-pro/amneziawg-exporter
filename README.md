@@ -84,3 +84,12 @@ systemctl enable amneziawg-exporter
 # check metrics:
 curl http://localhost:[port]/metrics
 ```
+
+## Grafana dashboard
+
+> [!IMPORTANT]
+> will not work correctly if clientTable has not been parsed by the exporter
+
+![Screenshot](amneziawg-exporter-grafana-dashboard.png)
+
+Import dashboard from [here](AmneziaWG-dashboard.json)
