@@ -1,49 +1,31 @@
-.PHONY: build docker docker_build docker_retag docker_login docker_push install
+.PHONY: install uninstall reload
+.EXPORT_ALL_VARIABLES:
 
-VERSION            := 1.1.0
-PROJECT_NAME       ?= amneziawg-exporter
-DOCKER_BUILDKIT    ?= 1
-DOCKER_REGISTRY    ?= ghcr.io
-DOCKER_USER        ?= none
-DOCKER_PASSWORD    ?= none
-DOCKER_IMAGE       ?= $(PROJECT_NAME)
-DOCKER_TAG         ?= latest
+PROJECT_NAME        ?= amneziawg-exporter
+VERSION             := 1.1.1
 
-
-ifeq ($(DOCKER_IMAGE), $(PROJECT_NAME))
-    DOCKER_TARGETS := docker_build
-else
-	DOCKER_TAG     := $(VERSION)
-    DOCKER_TARGETS := docker_build docker_push
-endif
-
-
-build: $(PROJECT_NAME)
-
-$(PROJECT_NAME):
-	#docker build . -t $(PROJECT_NAME)-builder --target builder
-	$(eval _CONTANER_ID := $(shell docker create $(PROJECT_NAME)-builder))
-	docker cp $(_CONTANER_ID):/exporter/dist/$(PROJECT_NAME) .
-	docker rm $(_CONTANER_ID)
-
-docker: $(DOCKER_TARGETS)
-
-docker_build:
-	docker build . -t $(DOCKER_IMAGE):$(DOCKER_TAG) --target exporter --build-arg VERSION=$(VERSION)
-
-docker_retag:
-	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_IMAGE):latest
-
-docker_login:
-	@echo "docker login -u ******* -p ******** $(DOCKER_REGISTRY)"
-	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASSWORD) $(DOCKER_REGISTRY)
-
-docker_push: docker_login docker_retag
-	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
-	docker push $(DOCKER_IMAGE):latest
+DOCKER_BUILDKIT     ?= 1
+BUILD_DIR           :=
+INSTALL_BIN_DIR     := $(BUILD_DIR)/usr/bin
+INSTALL_CONF_DIR    := $(BUILD_DIR)/etc
+INSTALL_SYSTEMD_DIR := $(BUILD_DIR)/etc/systemd/system
 
 install:
-	install -m 755 exporter.py /usr/bin/amneziawg-exporter
-	install amneziawg-exporter.env /etc/amneziawg-exporter.env
-	install amneziawg-exporter.service /etc/systemd/system/amneziawg-exporter.service
+	@echo "Installing amneziawg-exporter..."
+	install -Dm755 src/exporter.py $(INSTALL_BIN_DIR)/amneziawg-exporter
+	install -Dm644 etc/amneziawg-exporter.env $(INSTALL_CONF_DIR)/amneziawg-exporter.env
+	install -Dm644 etc/amneziawg-exporter.service $(INSTALL_SYSTEMD_DIR)/amneziawg-exporter.service
+
+uninstall:
+	@echo "Uninstalling amneziawg-exporter..."
+	rm -f $(INSTALL_BIN_DIR)/amneziawg-exporter
+	rm -f $(INSTALL_CONF_DIR)/amneziawg-exporter.env
+	rm -f $(INSTALL_SYSTEMD_DIR)/amneziawg-exporter.service
+
+reload:
+	@echo "Reloading systemd daemon..."
 	systemctl daemon-reload
+	@echo "Systemd daemon reloaded."
+
+include deb/deb.mk
+include docker.mk

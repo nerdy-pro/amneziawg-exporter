@@ -1,0 +1,9 @@
+#!/bin/bash
+if [ ! -f /etc/amneziawg-exporter.env ]; then
+    cp /etc/amneziawg-exporter.env.new /etc/amneziawg-exporter.env
+    echo "Default configuration file installed."
+else
+    echo "Configuration file already exists. Skipping installation of default config."
+fi
+systemctl daemon-reload
+exit 0

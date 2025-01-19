@@ -90,6 +90,6 @@ curl http://localhost:[port]/metrics
 > [!IMPORTANT]
 > will not work correctly if clientTable has not been parsed by the exporter
 
-![Screenshot](amneziawg-exporter-grafana-dashboard.png)
+![Screenshot](dashboard/amneziawg-exporter-grafana-dashboard.webp)
 
-Import dashboard from [here](AmneziaWG-dashboard.json)
+Import dashboard from [here](dashboard/AmneziaWG-dashboard.json)

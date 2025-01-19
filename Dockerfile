@@ -1,12 +1,12 @@
 ##############################################################################
-#=======================| Wal-g exporter Builder Image |=====================#
+#==========================| exporter builder Image |========================#
 ##############################################################################
 FROM python:bookworm AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 RUN pip3 install python-decouple prometheus-client pyinstaller
 COPY . /exporter
 WORKDIR /exporter
-RUN pyinstaller --name amneziawg-exporter --onefile exporter.py
+RUN pyinstaller --name amneziawg-exporter --onefile src/exporter.py
 
 FROM debian:bookworm-slim as exporter
 COPY --from=builder /exporter/dist/amneziawg-exporter /usr/bin/amneziawg-exporter
@@ -19,3 +19,11 @@ LABEL org.opencontainers.image.description='Prometheus Exporter for AmneziaWG Se
 LABEL org.opencontainers.image.authors='@shipilovds (shipilovds@gmail.com)'
 LABEL org.opencontainers.image.url=https://github.com/shipilovds/amneziawg-exporter
 LABEL org.opencontainers.image.documentation=https://github.com/shipilovds/amneziawg-exporter/blob/main/README.md
+
+##############################################################################
+#============================| dpkg builder Image |==========================#
+##############################################################################
+FROM ghcr.io/shipilovds/deb-builder as dpkg-builder
+COPY . /build
+WORKDIR /build
+RUN make deb
