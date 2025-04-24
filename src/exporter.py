@@ -87,17 +87,20 @@ class AwgShowWrapper:
         Args:
             text_block (str): The text block to parse.
         """
+        log = MyLogger('AwgShowWrapper').logger
         lines = text_block.strip().splitlines()
         peers = []
         for line in lines[1:]:  # exclude 1st line with host data
             parts = line.split()
             current_peer = {}
             if len(parts) >= 6:
+                log.info(f"Peer parts: {parts}")
                 current_peer['peer'] = parts[1]
                 current_peer['latest_handshake'] = parts[5]
                 current_peer['received'] = parts[6]
                 current_peer['sent'] = parts[7]
                 peers.append(current_peer)
+                log.info(f"Parsed peer: {current_peer}")
 
         return peers
 
